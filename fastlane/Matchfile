@@ -1,3 +1,5 @@
+# Not used by :beta/:release (they sign automatically). To use match, point this at your own
+# private certificates repo first.
 git_url("https://github.com/valentinlehmann/fastlane-match")
 
 storage_mode("git")
@@ -6,6 +8,6 @@ type("appstore") # The default type, can be: appstore, adhoc, enterprise or deve
 
 # Both bundle IDs match should fetch/create certs + profiles for (app + widget extension).
 app_identifier([
-  "de.valentinlehmann.swiftnzb",
-  "de.valentinlehmann.swiftnzb.widgets"
+  "com.claesmathias.swiftnzb",
+  "com.claesmathias.swiftnzb.widgets"
 ])

@@ -58,6 +58,14 @@ Push a new beta build to TestFlight
 
 Build and upload a release (binary + metadata) to the App Store. Does not auto-submit.
 
+### ios screenshots
+
+```sh
+[bundle exec] fastlane ios screenshots
+```
+
+Build composed 6.5-inch App Store screenshots into fastlane/screenshots (local only).
+
 ### ios metadata
 
 ```sh

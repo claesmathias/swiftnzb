@@ -93,6 +93,11 @@ SwiftNZBWidgets/             Live Activity (WidgetKit)
   fetch — and override the default `User-Agent`. Stored as JSON in the Keychain
   (`Keychain.indexerHeadersService`) because values are often credentials. Names are validated as
   HTTP tokens, values reject CR/LF (checked per scalar: Swift's `"\r\n"` is one Character).
+- The indexer **list syncs via iCloud KVS** (`indexers.v1`, mirrored to UserDefaults), like
+  `ServerStore`; keys/headers sync via the synchronizable Keychain and may land a moment later.
+  1.2.0 stored the list in UserDefaults only, so `mergeLocalIndexersOnce()` adds each device's
+  local indexers once, after iCloud has delivered its copy (not before, or the whole-blob
+  last-writer-wins store would drop the other device's list).
 - **HTTPS only.** The API key rides in every query string, so `NewznabRequest.baseURL(from:)`
   refuses `http://` (a bare host gets `https://`). No ATS exception exists or is needed.
 - Download = fetch the result's `t=get` link, check it is an NZB (`NZBValidation` — indexers send

@@ -18,15 +18,36 @@ final class IndexerStore {
     private(set) var accounts: [IndexerAccount] = []
 
     private let key = "indexers.v1"
+    /// Set once this device's local-only indexers (from builds before iCloud sync) are merged in.
+    private let migratedKey = "indexers.v1.mergedIntoICloud"
     private let defaults = UserDefaults.standard
-    /// False for preview stores, which must never write to the real defaults or Keychain.
+    private let kvs = NSUbiquitousKeyValueStore.default
+    /// False for preview stores, which must never write to the real defaults, iCloud or Keychain.
     private let persists: Bool
 
     private init() {
         persists = true
-        if let data = defaults.data(forKey: key),
-           let decoded = try? JSONDecoder().decode([IndexerAccount].self, from: data) {
-            accounts = decoded
+        load()
+        NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: kvs, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.load()
+                // iCloud has now delivered its copy, so merging can't overwrite another device's list.
+                self?.mergeLocalIndexersOnce()
+            }
+        }
+        kvs.synchronize()
+        if kvs.data(forKey: key) != nil {
+            mergeLocalIndexersOnce()
+        } else {
+            // An empty iCloud store may never send a change notification; merge after a grace
+            // period that gives a non-empty one time to arrive first.
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(10))
+                self?.mergeLocalIndexersOnce()
+            }
         }
     }
 
@@ -84,8 +105,39 @@ final class IndexerStore {
         return headers
     }
 
+    // MARK: - Persistence
+
+    /// The list syncs through iCloud Key-Value Store (mirrored to UserDefaults, local-only when
+    /// iCloud is unavailable), like ServerStore. API keys and headers ride along separately in the
+    /// synchronizable Keychain, so they can arrive a moment after the list on another device.
+    private func load() {
+        accounts = Self.decode(kvs.data(forKey: key)) ?? Self.decode(defaults.data(forKey: key)) ?? []
+    }
+
+    /// Builds before iCloud sync kept indexers in UserDefaults only. The iCloud copy is one blob
+    /// with last-writer-wins, so the first device to save would replace the other's list; instead,
+    /// each device adds its own local indexers once, matched by id.
+    private func mergeLocalIndexersOnce() {
+        guard !defaults.bool(forKey: migratedKey) else { return }
+        let local = Self.decode(defaults.data(forKey: key)) ?? []
+        let missing = local.filter { indexer in !accounts.contains { $0.id == indexer.id } }
+        if !missing.isEmpty {
+            accounts += missing
+            save()
+        } else if kvs.data(forKey: key) == nil, !accounts.isEmpty {
+            save()
+        }
+        defaults.set(true, forKey: migratedKey)
+    }
+
+    private static func decode(_ data: Data?) -> [IndexerAccount]? {
+        data.flatMap { try? JSONDecoder().decode([IndexerAccount].self, from: $0) }
+    }
+
     private func save() {
         guard persists, let data = try? JSONEncoder().encode(accounts) else { return }
         defaults.set(data, forKey: key)
+        kvs.set(data, forKey: key)
+        kvs.synchronize()
     }
 }

@@ -12,9 +12,15 @@ Screen + Dynamic Island) for the active download. Built with **XcodeGen + Fastla
 mirroring the author's **iobs** / Pagrr conventions.
 
 - Min OS: **iOS 26**. Swift 6, SwiftUI, `@Observable` (Observation).
-- Bundle IDs: app `de.valentinlehmann.swiftnzb`, widget `…swiftnzb.widgets`.
-- Team `68BLC88PQ9`. Apple ID `info@valentinlehmann.de`.
-- Distribution target: **public App Store** → no GPL code (PAR2 is clean-room, see below).
+- This repo is **Mathias Claes's fork** (`github.com/claesmathias/swiftnzb`) of Valentin
+  Lehmann's MIT-licensed `valentinlehmann/swiftnzb`. It adds indexer search and drops the Pro
+  tier; upstream's App Store strategy no longer applies.
+- Bundle IDs: app `com.claesmathias.swiftnzb`, widget `com.claesmathias.swiftnzb.widgets`.
+- Team `6ARY9ZB2W2` (Mathias Claes), automatic signing.
+- Distribution: **TestFlight only**, plus a GitHub release per version. Not the App Store: the
+  in-app indexer search contradicts the review strategy upstream was built around.
+- Still **no GPL code**: keeps the fork MIT and the App Store door open. That includes
+  LunaSea/zagreus (GPL-3.0) — UX reference only, never copy code.
 
 ## Build / run / verify
 
@@ -30,9 +36,9 @@ xcodebuild -project SwiftNZB.xcodeproj -scheme SwiftNZB \
 
 - After adding/removing/renaming **files**, run `xcodegen generate` before building (sources
   are globbed by path in `project.yml`).
-- Engine logic lives in **local SPM packages** (`Packages/DownloadEngine`, `Packages/PAR2Kit`)
-  — pure, deterministic, and unit-tested without the app: `cd Packages/DownloadEngine &&
-  swift test` (likewise PAR2Kit). This is a deliberate deviation from iobs (which has no
+- Engine logic lives in **local SPM packages** (`Packages/DownloadEngine`, `Packages/PAR2Kit`,
+  `Packages/NewznabKit`) — pure, deterministic, and unit-tested without the app:
+  `cd Packages/DownloadEngine && swift test` (likewise PAR2Kit and NewznabKit). This is a deliberate deviation from iobs (which has no
   packages); the protocol/decoder/Reed-Solomon math demands isolated tests.
 - Treat `** BUILD SUCCEEDED **` as success.
 
@@ -169,8 +175,27 @@ SwiftNZBWidgets/             Live Activity (WidgetKit)
 
 ## Provisioning (device / TestFlight)
 
-- Code signing uses Fastlane **match** for both bundle IDs. One-time: `bundle exec fastlane
-  register_ids` (creates the App IDs incl. widget), then `match development` / `match appstore`.
+- **Automatic signing**: `project.yml` sets `DEVELOPMENT_TEAM: 6ARY9ZB2W2` and
+  `CODE_SIGN_STYLE: Automatic`; Xcode's signed-in account creates the profiles
+  (`-allowProvisioningUpdates` on the command line). Fastlane **match** is not used; the
+  `Matchfile` still names upstream's certificates repo and only matters if match comes back.
+- **Releasing a version** (how 1.2.0 and 1.2.1 shipped):
+  1. Bump `MARKETING_VERSION` in `project.yml` (both targets), `xcodegen generate`, commit.
+  2. Archive with a timestamp build number:
+     `xcodebuild -project SwiftNZB.xcodeproj -scheme SwiftNZB -configuration Release
+     -destination 'generic/platform=iOS' -archivePath /tmp/SwiftNZB.xcarchive
+     -allowProvisioningUpdates CURRENT_PROJECT_VERSION=$(date +%Y%m%d%H%M) archive`.
+     Pass the number as a build setting; don't let it be written into the Info.plists.
+  3. Upload: `xcodebuild -exportArchive … -allowProvisioningUpdates` with an export-options
+     plist of `method app-store-connect`, `destination upload`, `teamID 6ARY9ZB2W2`,
+     `signingStyle automatic`. This uses the Xcode account, no API key needed.
+  4. Tag **`v<MARKETING_VERSION>`** on the built commit, push, and `gh release create`.
+     Settings → About links the version row to `…/releases/tag/v<version>`, so the tag must
+     match `MARKETING_VERSION` exactly.
+- `fastlane beta` also works but needs `APP_STORE_CONNECT_API_KEY_KEY_ID`, `…_ISSUER_ID` and
+  `…_CONTENT` (base64 of the .p8) exported. The `.github/workflows` are inherited from upstream
+  and expect match secrets; they are not set up on the fork (fork Actions stay off until
+  enabled), so CI builds nothing.
 - **Appfile `app_identifier` must stay a single String** (`upload_to_testflight`/`produce`
   require it). The list of both bundle IDs for **match** lives in the **Matchfile**.
 - The **Gemfile** must declare `multi_json` (and `abbrev`) — Bundler 4 / Ruby 3.3+ won't
@@ -190,17 +215,19 @@ SwiftNZBWidgets/             Live Activity (WidgetKit)
   (Network.framework), which ATS does not police — so plain NNTP / self-signed TLS already work
   without `NSAllowsArbitraryLoads`. Omitting a global exception avoids unnecessary review
   scrutiny. Re-add a *scoped* exception only if HTTP URL loading (e.g. NZB-by-URL) is introduced.
-- **App Store review notes**: the app bundles no indexers or content — bring-your-own server +
-  NZB. PAR2/unrar are generic file utilities. NZB/Usenet apps draw heightened scrutiny; keep the
-  framing as a generic NNTP protocol client (see `docs/AppStoreReview.md` for the full strategy,
-  demo-account/demo-NZB plan, and rejection playbook, plus listing texts in `fastlane/metadata/`).
+- **App Store review notes** (upstream only, not used by this fork): `docs/AppStoreReview.md`
+  and `fastlane/metadata/` frame the app as a generic NNTP client with no search. That is no
+  longer true here; rewrite both before any App Store submission.
 - **Privacy manifests**: both targets ship a `PrivacyInfo.xcprivacy` (app: UserDefaults CA92.1,
   file timestamps C617.1, disk space E174.1; widget: none). Data-not-collected, no tracking.
 
 ## Gotchas recap
 
 - Edit `project.yml`, not the xcodeproj. Regenerate after file changes.
-- Don't add GPL code (no par2cmdline) — App Store + clean-room PAR2 is intentional.
+- Don't add GPL code (no par2cmdline, no LunaSea/zagreus code) — the MIT license and clean-room
+  PAR2 are intentional.
+- Never commit indexer API keys, Cloudflare service tokens or other credentials; they belong in
+  the app's Keychain only. Live checks against an indexer pass them on the command line.
 - Local-package SOURCES under `Packages/` are committed; `.gitignore` deliberately does NOT
   ignore `Packages/` (only `.build/`, `.swiftpm/`, `Package.resolved`).
 - App icon is `AppIcon.icon` (Icon Composer) at the repo root, referenced as a resource in

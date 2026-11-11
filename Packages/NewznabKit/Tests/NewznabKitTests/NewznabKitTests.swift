@@ -69,7 +69,7 @@ struct HeaderTests {
 
     @Test func parsesPastedHeaderLines() {
         let pasted = """
-        CF-Access-Client-Id: 2f42.access
+        CF-Access-Client-Id: example-id.access
         CF-Access-Client-Secret: cfast_abc
         -H "Authorization: Bearer a:b:c"
         not a header
@@ -77,7 +77,7 @@ struct HeaderTests {
         """
         let parsed = NewznabRequest.parseHeaderLines(pasted)
         #expect(parsed.map(\.name) == ["CF-Access-Client-Id", "CF-Access-Client-Secret", "Authorization"])
-        #expect(parsed.map(\.value) == ["2f42.access", "cfast_abc", "Bearer a:b:c"])
+        #expect(parsed.map(\.value) == ["example-id.access", "cfast_abc", "Bearer a:b:c"])
     }
 
     @Test func buildsBasicAuthorization() {
@@ -122,9 +122,9 @@ struct StatusTests {
         #expect(SameHostRedirects.decision(from: from, to: login, followForeignRedirects: true) == .refuse)
     }
 
-    /// What prowlarr.claesmathias.be sends without a valid Access service token.
+    /// What a Cloudflare Access–protected Prowlarr sends without a valid service token.
     @Test func cloudflareAccessLoginRedirect() throws {
-        let target = URL(string: "https://claesmathias.cloudflareaccess.com/cdn-cgi/access/login/prowlarr.claesmathias.be?kid=e5a7")
+        let target = URL(string: "https://example-team.cloudflareaccess.com/cdn-cgi/access/login/prowlarr.example.com?kid=0000")
         #expect(NewznabClient.redirectError(to: target) == .cloudflareAccess)
         #expect(NewznabClient.redirectError(to: URL(string: "https://other.example.org/x")) == .redirected(host: "other.example.org"))
     }

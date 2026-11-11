@@ -298,7 +298,7 @@ struct AddIndexerView: View {
     NavigationStack {
         AddIndexerView(existing: IndexerAccount(name: "Prowlarr", url: "https://prowlarr.example.com", kind: .prowlarr),
                        store: SearchPreviewData.store,
-                       initialHeaders: [IndexerHeader(name: "CF-Access-Client-Id", value: "2f42…9e94.access"),
+                       initialHeaders: [IndexerHeader(name: "CF-Access-Client-Id", value: "example-id.access"),
                                         IndexerHeader(name: "CF-Access-Client-Secret", value: "secret")])
     }
 }

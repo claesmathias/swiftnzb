@@ -26,6 +26,8 @@ struct IndexerHeaderEditor: View {
         ("User-Agent", "When the indexer only accepts certain apps"),
         ("Authorization", "Credentials for a proxy in front of the indexer"),
         ("Cookie", "A session the indexer or its proxy expects"),
+        ("CF-Access-Client-Id", "Cloudflare Access service token ID"),
+        ("CF-Access-Client-Secret", "Cloudflare Access service token secret"),
     ]
 
     private var name: String { header.name.trimmingCharacters(in: .whitespaces) }
@@ -48,7 +50,6 @@ struct IndexerHeaderEditor: View {
                 TextField("Name", text: $header.name, prompt: Text(verbatim: "User-Agent"))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .font(.body.monospaced())
             } header: {
                 Text("Name")
             } footer: {
@@ -61,7 +62,6 @@ struct IndexerHeaderEditor: View {
                 TextField("Value", text: $header.value, prompt: Text("Value"), axis: .vertical)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .font(.body.monospaced())
                     .lineLimit(1...4)
             }
 
@@ -73,7 +73,6 @@ struct IndexerHeaderEditor: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(verbatim: suggestion.name)
-                                    .font(.body.monospaced())
                                     .foregroundStyle(.primary)
                                 Text(suggestion.hint)
                                     .font(.caption)
@@ -81,10 +80,13 @@ struct IndexerHeaderEditor: View {
                             }
                             Spacer()
                             if name.caseInsensitiveCompare(suggestion.name) == .orderedSame {
-                                Image(systemName: "checkmark").foregroundStyle(.tint)
+                                Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
                             }
                         }
+                        .contentShape(.rect)
                     }
+                    // A plain style keeps the row text in label colors instead of link blue.
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -97,6 +99,41 @@ struct IndexerHeaderEditor: View {
                     dismiss()
                 }
                 .disabled(!canSave)
+            }
+        }
+    }
+}
+
+/// Builds an `Authorization: Basic …` header from a username and password, for a proxy that uses
+/// HTTP Basic authentication. Only the encoded header is stored, not the separate fields.
+struct BasicAuthenticationEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var username = ""
+    @State private var password = ""
+    let onSave: (String) -> Void
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Username", text: $username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textContentType(.username)
+                SecureField("Password", text: $password)
+                    .textContentType(.password)
+            } footer: {
+                Text("For a proxy or server that asks for a username and password (HTTP Basic). Saved as an Authorization header.")
+            }
+        }
+        .navigationTitle("Basic Authentication")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Add") {
+                    onSave(NewznabRequest.basicAuthorization(username: username, password: password))
+                    dismiss()
+                }
+                .disabled(username.isEmpty || username.contains(":"))
             }
         }
     }
@@ -116,7 +153,6 @@ struct IndexerHeaderRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(verbatim: header.name)
-                .font(.body.monospaced())
             Group {
                 if header.value.isEmpty {
                     Text("Empty value")
@@ -126,7 +162,7 @@ struct IndexerHeaderRow: View {
                     Text(verbatim: header.value)
                 }
             }
-            .font(.caption.monospaced())
+            .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
         }

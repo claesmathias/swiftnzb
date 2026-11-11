@@ -10,6 +10,8 @@ import Foundation
 
 public enum NewznabParser {
     public static func parseSearch(_ data: Data) throws -> [NewznabItem] {
+        if isHTML(data) { throw NewznabError.webPage }
+        if isArrRootAPI(data) { throw NewznabError.prowlarrRoot }
         let delegate = SearchDelegate()
         let parser = XMLParser(data: data)
         // Keep prefixed names ("newznab:attr") rather than resolving namespaces: some indexers
@@ -20,9 +22,29 @@ public enum NewznabParser {
 
         if let error = delegate.apiError { throw error }
         guard ok || !delegate.items.isEmpty, delegate.sawRSS else {
-            throw NewznabError.unexpectedResponse
+            throw NewznabError.unexpectedResponse(excerpt: excerpt(of: data))
         }
         return delegate.items
+    }
+
+    /// True when the body is an HTML document rather than XML from the API.
+    static func isHTML(_ data: Data) -> Bool {
+        let head = String(decoding: data.prefix(1024), as: UTF8.self).lowercased()
+        return head.contains("<!doctype html") || head.contains("<html")
+    }
+
+    /// True for the `{"current":"v1","deprecated":[]}` that Prowlarr (and Sonarr/Radarr) send for
+    /// their root `/api`.
+    static func isArrRootAPI(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return object["current"] is String
+    }
+
+    /// The first characters of a body, whitespace collapsed, for an error message.
+    static func excerpt(of data: Data, length: Int = 120) -> String {
+        let text = String(decoding: data.prefix(2048), as: UTF8.self)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return text.count > length ? String(text.prefix(length)) + "…" : text
     }
 
     /// The `<error>` a Newznab endpoint sends instead of content, if `data` is one.
@@ -79,7 +101,7 @@ private final class SearchDelegate: NSObject, XMLParserDelegate {
         case "enclosure" where inItem:
             enclosureURL = attributes["url"]
             enclosureLength = Int(attributes["length"] ?? "")
-        case "newznab:attr", "attr" where inItem:
+        case "newznab:attr" where inItem, "attr" where inItem:
             if let name = attributes["name"], let value = attributes["value"] {
                 attrs.append((name.lowercased(), value))
             }

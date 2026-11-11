@@ -8,8 +8,8 @@ import SwiftUI
 struct IndexersSettingsView: View {
     @State private var store: IndexerStore
 
-    init(store: IndexerStore = .shared) {
-        _store = State(initialValue: store)
+    init(store: IndexerStore? = nil) {
+        _store = State(initialValue: store ?? .shared)
     }
 
     var body: some View {

@@ -3,7 +3,8 @@
 //  SwiftNZB
 //
 //  The configured Newznab indexers. Metadata is persisted as JSON in UserDefaults; each API key
-//  lives in the Keychain under the indexer's id, the same split ServerStore uses for passwords.
+//  and custom-header list lives in the Keychain under the indexer's id, the same split ServerStore
+//  uses for passwords.
 //
 
 import Foundation
@@ -38,7 +39,7 @@ final class IndexerStore {
     var hasIndexers: Bool { !accounts.isEmpty }
     var enabledAccounts: [IndexerAccount] { accounts.filter(\.isEnabled) }
 
-    func upsert(_ account: IndexerAccount, apiKey: String) {
+    func upsert(_ account: IndexerAccount, apiKey: String, headers: [IndexerHeader] = []) {
         if let index = accounts.firstIndex(where: { $0.id == account.id }) {
             accounts[index] = account
         } else {
@@ -46,6 +47,12 @@ final class IndexerStore {
         }
         if persists {
             Keychain.setPassword(apiKey, for: account.id.uuidString, service: Keychain.indexerAPIKeyService)
+            if headers.isEmpty {
+                Keychain.deletePassword(for: account.id.uuidString, service: Keychain.indexerHeadersService)
+            } else if let data = try? JSONEncoder().encode(headers) {
+                Keychain.setPassword(String(decoding: data, as: UTF8.self), for: account.id.uuidString,
+                                     service: Keychain.indexerHeadersService)
+            }
         }
         save()
     }
@@ -60,6 +67,7 @@ final class IndexerStore {
         accounts.removeAll { $0.id == id }
         if persists {
             Keychain.deletePassword(for: id.uuidString, service: Keychain.indexerAPIKeyService)
+            Keychain.deletePassword(for: id.uuidString, service: Keychain.indexerHeadersService)
         }
         save()
     }
@@ -67,6 +75,13 @@ final class IndexerStore {
     func apiKey(for id: UUID) -> String? {
         guard persists else { return nil }
         return Keychain.password(for: id.uuidString, service: Keychain.indexerAPIKeyService)
+    }
+
+    func headers(for id: UUID) -> [IndexerHeader] {
+        guard persists,
+              let json = Keychain.password(for: id.uuidString, service: Keychain.indexerHeadersService),
+              let headers = try? JSONDecoder().decode([IndexerHeader].self, from: Data(json.utf8)) else { return [] }
+        return headers
     }
 
     private func save() {

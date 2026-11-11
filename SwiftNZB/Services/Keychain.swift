@@ -3,12 +3,12 @@
 //  SwiftNZB
 //
 //  Thin wrapper over the Security framework for the two things worth storing there: server
-//  passwords and the free-download counter. Entries are marked synchronizable so they ride along
+//  passwords and indexer API keys. Entries are marked synchronizable so they ride along
 //  with iCloud Keychain (matching the iCloud-KVS sync of the non-secret account metadata in
 //  ServerStore).
 //
-//  The `service` parameter keeps the two uses in separate namespaces, so a counter key can never
-//  collide with a server account's UUID.
+//  The `service` parameter keeps the two uses in separate namespaces, so an indexer's key can never
+//  collide with a server account's password.
 //
 
 import Foundation
@@ -16,6 +16,8 @@ import Security
 
 enum Keychain {
     static let serverPasswordService = "de.valentinlehmann.swiftnzb.serverpassword"
+    static let indexerAPIKeyService = "de.valentinlehmann.swiftnzb.indexerapikey"
+    static let indexerHeadersService = "de.valentinlehmann.swiftnzb.indexerheaders"
 
     static func setPassword(_ password: String, for account: String,
                             service: String = serverPasswordService) {

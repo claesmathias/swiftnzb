@@ -51,7 +51,8 @@ public struct ProwlarrClient: Sendable {
     public var headers: [String: String]
     private let session: URLSession
 
-    public init(baseURL: URL, apiKey: String, headers: [String: String] = [:], session: URLSession = .shared) {
+    public init(baseURL: URL, apiKey: String, headers: [String: String] = [:],
+                session: URLSession = NewznabClient.defaultSession) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.headers = headers

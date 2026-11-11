@@ -83,8 +83,9 @@ struct IndexerResult: Identifiable, Hashable, Sendable {
     var indexerID: UUID
     var indexerName: String
     var category: IndexerCategory
-    var sizeBytes: Int
-    var publishedAt: Date
+    /// nil when the indexer doesn't report it.
+    var sizeBytes: Int?
+    var publishedAt: Date?
     /// How often the NZB was downloaded, when the indexer reports it.
     var grabs: Int?
     /// Where the .nzb file is fetched from.
@@ -107,8 +108,8 @@ enum IndexerSort: String, CaseIterable, Identifiable, Sendable {
 
     func sorted(_ results: [IndexerResult]) -> [IndexerResult] {
         switch self {
-        case .newest: return results.sorted { $0.publishedAt > $1.publishedAt }
-        case .largest: return results.sorted { $0.sizeBytes > $1.sizeBytes }
+        case .newest: return results.sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
+        case .largest: return results.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
         case .mostGrabbed: return results.sorted { ($0.grabs ?? 0) > ($1.grabs ?? 0) }
         }
     }

@@ -10,6 +10,7 @@ import SwiftUI
 enum AppSection: String, CaseIterable, Identifiable, Sendable {
     case queue
     case history
+    case search
     case settings
 
     var id: String { rawValue }
@@ -19,6 +20,7 @@ enum AppSection: String, CaseIterable, Identifiable, Sendable {
         case .queue: return "Queue"
         // The case stays `history` — internally it is the job history — but users see "Downloads".
         case .history: return "Downloads"
+        case .search: return "Search"
         case .settings: return "Settings"
         }
     }
@@ -27,6 +29,7 @@ enum AppSection: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .queue: return "arrow.down.circle"
         case .history: return "checkmark.circle"
+        case .search: return "magnifyingglass"
         case .settings: return "gearshape"
         }
     }

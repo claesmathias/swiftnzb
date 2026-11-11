@@ -13,8 +13,9 @@ struct SearchView: View {
     @State private var indexers: IndexerStore
     @State private var showingAddIndexer = false
 
-    init(viewModel: SearchViewModel = SearchViewModel(), indexers: IndexerStore = .shared) {
-        _viewModel = State(initialValue: viewModel)
+    init(viewModel: SearchViewModel? = nil, indexers: IndexerStore? = nil) {
+        let indexers = indexers ?? .shared
+        _viewModel = State(initialValue: viewModel ?? SearchViewModel(store: indexers))
         _indexers = State(initialValue: indexers)
     }
 
@@ -22,9 +23,15 @@ struct SearchView: View {
         content
             .navigationTitle("Search")
             .searchable(text: $viewModel.query, prompt: Text("Search your indexers"))
-            .onSubmit(of: .search) { Task { await viewModel.search() } }
+            .onSubmit(of: .search) { viewModel.submit() }
             .onChange(of: viewModel.query) { _, new in
                 if new.isEmpty { viewModel.clear() }
+            }
+            .onChange(of: viewModel.category) { viewModel.categoryChanged() }
+            .alert("Download Failed", isPresented: downloadErrorBinding) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(verbatim: viewModel.downloadError ?? "")
             }
             .toolbar {
                 if indexers.hasIndexers {
@@ -77,7 +84,7 @@ struct SearchView: View {
                 Section("Recent Searches") {
                     ForEach(viewModel.recentSearches, id: \.self) { recent in
                         Button {
-                            Task { await viewModel.search(for: recent) }
+                            viewModel.search(for: recent)
                         } label: {
                             Label { Text(verbatim: recent) } icon: { Image(systemName: "clock.arrow.circlepath") }
                         }
@@ -100,7 +107,7 @@ struct SearchView: View {
         } description: {
             Text(verbatim: message)
         } actions: {
-            Button("Try Again") { Task { await viewModel.search() } }
+            Button("Try Again") { viewModel.submit() }
                 .buttonStyle(.glass)
         }
     }
@@ -111,6 +118,13 @@ struct SearchView: View {
                 categoryChips
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                if !viewModel.sourceCounts.isEmpty {
+                    sourceChips
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
             .listSectionSpacing(.compact)
 
@@ -120,17 +134,30 @@ struct SearchView: View {
             } else {
                 Section {
                     ForEach(viewModel.visibleResults) { result in
-                        SearchResultRow(result: result) { viewModel.download(result) }
+                        SearchResultRow(result: result,
+                                        isDownloading: viewModel.downloadingIDs.contains(result.id)) {
+                            viewModel.download(result)
+                        }
                     }
                 } footer: {
-                    Text("^[\(viewModel.visibleResults.count) result](inflect: true)")
+                    if let source = viewModel.indexerFilter {
+                        Text("^[\(viewModel.visibleResults.count) result](inflect: true) from \(source)")
+                    } else {
+                        Text("^[\(viewModel.visibleResults.count) result](inflect: true) from ^[\(viewModel.sourceCounts.count) indexer](inflect: true)")
+                    }
                 }
             }
-        }
-        .alert("Download Failed", isPresented: downloadErrorBinding) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(verbatim: viewModel.downloadError ?? "")
+
+            if !viewModel.failures.isEmpty {
+                Section("Some Indexers Failed") {
+                    ForEach(viewModel.failures, id: \.self) { failure in
+                        Label { Text(verbatim: failure) } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        }
+                        .font(.footnote)
+                    }
+                }
+            }
         }
     }
 
@@ -146,8 +173,11 @@ struct SearchView: View {
                     Button {
                         viewModel.category = category
                     } label: {
-                        Label(category.title, systemImage: category.systemImage)
-                            .font(.subheadline.weight(.medium))
+                        HStack(spacing: 5) {
+                            Image(systemName: category.systemImage)
+                            Text(category.title)
+                        }
+                        .font(.subheadline.weight(.medium))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                     }
@@ -162,6 +192,46 @@ struct SearchView: View {
         }
     }
 
+    /// Which indexers returned how many results; tapping one shows only its results. Smaller than
+    /// the category chips, since it is a breakdown rather than the primary filter.
+    private var sourceChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                sourceChip(name: nil, count: viewModel.categoryResultCount)
+                ForEach(viewModel.sourceCounts) { source in
+                    sourceChip(name: source.name, count: source.count)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func sourceChip(name: String?, count: Int) -> some View {
+        let isSelected = viewModel.indexerFilter == name
+        return Button {
+            viewModel.indexerFilter = name
+        } label: {
+            HStack(spacing: 4) {
+                if name == nil {
+                    Image(systemName: "server.rack")
+                }
+                Text(verbatim: name ?? String(localized: "All Indexers"))
+                Text(verbatim: "\(count)")
+                    .monospacedDigit()
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            }
+            .font(.footnote.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+        .background(isSelected ? Color.accentColor.opacity(0.15) : Color(.tertiarySystemFill), in: Capsule())
+        .accessibilityLabel(Text(verbatim: "\(name ?? String(localized: "All Indexers")), \(count)"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
     private var sortAndFilterMenu: some View {
         Menu {
             Picker(selection: $viewModel.sort) {
@@ -171,10 +241,13 @@ struct SearchView: View {
             }
             .pickerStyle(.menu)
 
-            if indexers.accounts.count > 1 {
+            if viewModel.sourceCounts.count > 1 {
                 Picker(selection: $viewModel.indexerFilter) {
-                    Text("All Indexers").tag(UUID?.none)
-                    ForEach(indexers.accounts) { Text(verbatim: $0.name).tag(UUID?.some($0.id)) }
+                    Text(verbatim: "\(String(localized: "All Indexers")) (\(viewModel.categoryResultCount))")
+                        .tag(String?.none)
+                    ForEach(viewModel.sourceCounts) { source in
+                        Text(verbatim: "\(source.name) (\(source.count))").tag(String?.some(source.name))
+                    }
                 } label: {
                     Label("Indexer", systemImage: "server.rack")
                 }
@@ -192,10 +265,11 @@ struct SearchView: View {
 }
 
 #if DEBUG
+@MainActor
 enum SearchPreviewData {
     static let geek = IndexerAccount(name: "NZBGeek", url: "https://api.nzbgeek.info")
     static let planet = IndexerAccount(name: "NZBPlanet", url: "https://api.nzbplanet.net")
-    static let hydra = IndexerAccount(name: "NZBHydra2", url: "http://192.168.1.20:5076", isEnabled: false)
+    static let hydra = IndexerAccount(name: "NZBHydra2", url: "https://hydra.example.net", isEnabled: false)
 
     static var store: IndexerStore { IndexerStore(previewAccounts: [geek, planet, hydra]) }
 
@@ -217,7 +291,9 @@ enum SearchPreviewData {
     ]
 
     static func viewModel(searched: Bool) -> SearchViewModel {
-        let vm = SearchViewModel(store: store) { _, _, _ in results }
+        let vm = SearchViewModel(store: store, searcher: { _, _, _ in
+            IndexerSearchService.Outcome(results: results, failures: [])
+        })
         if searched {
             vm.query = "open movie"
             Task { await vm.search() }

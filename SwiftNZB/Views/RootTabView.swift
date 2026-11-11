@@ -15,7 +15,9 @@ struct RootTabView: View {
     var body: some View {
         TabView(selection: $router.section) {
             ForEach(AppSection.allCases) { section in
-                Tab(section.title, systemImage: section.systemImage, value: section) {
+                // The search role gives Search its own floating button beside the tab bar.
+                Tab(section.title, systemImage: section.systemImage, value: section,
+                    role: section == .search ? .search : nil) {
                     NavigationStack(path: path(section)) { SectionDestinationView(section: section) }
                 }
             }
@@ -40,6 +42,7 @@ struct SectionDestinationView: View {
         switch section {
         case .queue: QueueView()
         case .history: HistoryView()
+        case .search: SearchView()
         case .settings: SettingsView()
         }
     }

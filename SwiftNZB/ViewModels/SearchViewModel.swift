@@ -28,8 +28,9 @@ final class SearchViewModel {
     var query = ""
     var category: IndexerCategory = .all
     var sort: IndexerSort = .newest
-    /// nil shows results from every indexer.
-    var indexerFilter: UUID?
+    /// The source indexer to show (a result's `indexerName`, so the indexers behind a Prowlarr entry
+    /// each count separately); nil shows every source.
+    var indexerFilter: String?
     private(set) var state: State = .idle
     private(set) var results: [IndexerResult] = []
     /// One line per indexer that failed while others answered.
@@ -45,7 +46,10 @@ final class SearchViewModel {
     private let fetcher: Fetcher
     private var searchTask: Task<Void, Never>?
 
-    init(store: IndexerStore = .shared, searcher: Searcher? = nil, fetcher: Fetcher? = nil) {
+    /// `store` defaults to `.shared`, resolved here rather than as a default argument: default
+    /// arguments are evaluated outside the main actor, where `shared` isn't reachable.
+    init(store: IndexerStore? = nil, searcher: Searcher? = nil, fetcher: Fetcher? = nil) {
+        let store = store ?? .shared
         self.store = store
         self.searcher = searcher ?? { query, category, indexers in
             let credentials = IndexerSearchService.credentials(for: indexers, store: store)
@@ -60,12 +64,28 @@ final class SearchViewModel {
         }
     }
 
+    struct SourceCount: Identifiable, Hashable {
+        let name: String
+        let count: Int
+        var id: String { name }
+    }
+
+    private var resultsInCategory: [IndexerResult] {
+        results.filter { category == .all || $0.category == category }
+    }
+
+    /// How many results each source indexer returned for the current category, most first.
+    var sourceCounts: [SourceCount] {
+        Dictionary(grouping: resultsInCategory, by: \.indexerName)
+            .map { SourceCount(name: $0.key, count: $0.value.count) }
+            .sorted { $0.count != $1.count ? $0.count > $1.count
+                                           : $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    var categoryResultCount: Int { resultsInCategory.count }
+
     var visibleResults: [IndexerResult] {
-        let filtered = results.filter { result in
-            (indexerFilter == nil || result.indexerID == indexerFilter)
-                && (category == .all || result.category == category)
-        }
-        return sort.sorted(filtered)
+        sort.sorted(resultsInCategory.filter { indexerFilter == nil || $0.indexerName == indexerFilter })
     }
 
     /// Starts a search, replacing any that is still running.
@@ -84,6 +104,10 @@ final class SearchViewModel {
             guard !Task.isCancelled else { return }
             results = outcome.results
             failures = outcome.failures
+            // Keep the source filter only if that indexer returned something this time.
+            if let filter = indexerFilter, !results.contains(where: { $0.indexerName == filter }) {
+                indexerFilter = nil
+            }
             state = .results
         } catch {
             guard !Task.isCancelled else { return }
@@ -114,8 +138,8 @@ final class SearchViewModel {
             do {
                 let file = try await fetcher(result)
                 ImportCoordinator.shared.handle(url: file)
-                // The importer keeps its own copy in the app's nzb folder.
-                try? FileManager.default.removeItem(at: file)
+                // The importer keeps its own copy in the app's nzb folder; drop the per-download folder.
+                try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
             } catch {
                 downloadError = error.localizedDescription
             }

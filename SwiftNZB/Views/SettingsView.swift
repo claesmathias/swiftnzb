@@ -12,6 +12,7 @@ struct SettingsView: View {
         List {
             Section {
                 row("Servers", "Accounts and the default server", "server.rack") { ServersSettingsView() }
+                row("Indexers", "Newznab indexers to search", "magnifyingglass") { IndexersSettingsView() }
                 row("Connections", "Parallel connections per download", "point.3.connected.trianglepath.dotted") { ConnectionsSettingsView() }
                 row("Bandwidth", "Speed limit and cellular use", "speedometer") { BandwidthSettingsView() }
                 row("Post-Processing", "PAR2 repair and RAR extraction", "wand.and.stars") { PostProcessingSettingsView() }
@@ -46,3 +47,9 @@ struct SettingsView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Settings") {
+    NavigationStack { SettingsView() }
+}
+#endif

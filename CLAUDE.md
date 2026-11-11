@@ -48,6 +48,7 @@ Localizable.xcstrings        String catalog (auto-extracted; en + de) — don't 
 fastlane/{Fastfile,Appfile,Matchfile}
 Packages/DownloadEngine/     NNTP transport, yEnc, CRC32, scheduler, pool, assembler, checkpoint
 Packages/PAR2Kit/            Clean-room PAR2 parse / verify / Reed-Solomon repair (no GPL)
+Packages/NewznabKit/         Newznab indexer API: URL building, RSS/error parsing, NZB validation
 SwiftNZB/
   Types/                     Plain Codable models (no logic); DownloadActivityAttributes is shared
   Services/                  @Observable @MainActor singletons (DownloadManager, ServerStore, …)
@@ -81,6 +82,50 @@ SwiftNZBWidgets/             Live Activity (WidgetKit)
 - PAR2 verify+repair is a **clean-room Swift implementation** in `Packages/PAR2Kit`. Do **not**
   introduce `par2cmdline`/`libpar2` or any GPL code — GPL is incompatible with App Store
   distribution. UnRAR (via the `Unrar.swift` SPM dependency) IS acceptable for the App Store.
+
+### Indexer search
+
+- Settings → Indexers holds Newznab indexers (NZBGeek, or NZBHydra2/Prowlarr via their Newznab
+  endpoint); the API key is in the Keychain (`Keychain.indexerAPIKeyService`). The Search tab
+  queries every enabled indexer in parallel through `IndexerSearchService`; one failing indexer
+  is listed, never hides the others' results.
+- Per-indexer **custom headers** (`IndexerHeader`) go on every request — search, test and the .nzb
+  fetch — and override the default `User-Agent`. Stored as JSON in the Keychain
+  (`Keychain.indexerHeadersService`) because values are often credentials. Names are validated as
+  HTTP tokens, values reject CR/LF (checked per scalar: Swift's `"\r\n"` is one Character).
+- **HTTPS only.** The API key rides in every query string, so `NewznabRequest.baseURL(from:)`
+  refuses `http://` (a bare host gets `https://`). No ATS exception exists or is needed.
+- Download = fetch the result's `t=get` link, check it is an NZB (`NZBValidation` — indexers send
+  an `<error>` or HTML on grab limits), write it to a temp file, then
+  `ImportCoordinator.handle(url:)`, the same path as a shared file. Don't add a second import path.
+- **Redirects are followed only within the same host over HTTPS** (`SameHostRedirects`):
+  URLSession would otherwise carry custom headers and the API-key query to the redirect target.
+  Exception, for the .nzb download only: an HTTPS redirect to another host is followed as a bare
+  request (User-Agent only). Prowlarr's `/{id}/download` does this for indexers with its
+  "Redirect" option on, handing off to e.g. `api.nzbgeek.info` with that indexer's key in the URL.
+  A refused redirect to `*.cloudflareaccess.com` maps to `.cloudflareAccess` (missing/invalid
+  `CF-Access-Client-Id`/`-Secret` service token); empty 401/403 maps to `.unauthorized`.
+- Two indexer kinds (`IndexerKind`): `.newznab` (a Newznab endpoint, incl. one Prowlarr indexer's
+  `/<id>/api` feed) and `.prowlarr` (`ProwlarrClient`: Prowlarr's v1 API, `GET /api/v1/search`,
+  key in `X-Api-Key`, one entry searches all Prowlarr indexers; torrent results are dropped). Test
+  Connection for Prowlarr is `GET /api/v1/indexer`. Prowlarr's root `/api` is not Newznab.
+- A Newznab-type entry pointed at Prowlarr's root gets `{"current":"v1",…}` from `/api`;
+  `NewznabParser` reports `.prowlarrRoot` and Test Connection switches the type to Prowlarr.
+- Header UX follows Ruddarr/LunaSea: rows + editor, **Add Basic Authentication** (builds
+  `Authorization: Basic …`), and a `PasteButton` taking `Name: Value` lines
+  (`NewznabRequest.parseHeaderLines`, split at the first colon; same name replaces the value).
+- Prowlarr behind a TLS proxy builds `http://` links on its own host; `NewznabClient.secured` upgrades
+  same-host `http` to `https` and refuses plain HTTP to any other host.
+- Indexer requests use `NewznabClient.defaultSession`: **no cookies, no cache.** Cloudflare Access
+  sets `CF_Authorization` on the first authorized request; a cookie jar would let later requests
+  through without the service-token headers, so a revoked token would seem to keep working.
+- An indexer's **website** address answers `/api` with an HTML login page (`nzbgeek.info` vs
+  `api.nzbgeek.info`); `NewznabParser` reports that as `.webPage` with the fix, and any other
+  unparseable body as `.unexpectedResponse(excerpt:)` quoting how it began.
+- Indexers disagree on error codes (NZBGeek: 101 "Invalid API Key"), so show the indexer's own
+  `description`; the code mapping is only a fallback.
+- Not for the App Store: the review notes in `fastlane/metadata` and `docs/AppStoreReview.md`
+  argue "no search in the app", which this feature contradicts.
 
 ### No purchases
 

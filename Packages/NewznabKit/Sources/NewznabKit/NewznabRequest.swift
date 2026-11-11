@@ -24,6 +24,43 @@ public enum NewznabRequest {
         return url
     }
 
+    /// Whether `name` is a valid HTTP header field name (an RFC 9110 token: visible ASCII without
+    /// separators such as spaces, colons or quotes).
+    public static func isValidHeaderName(_ name: String) -> Bool {
+        let allowed = Set("!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        return !name.isEmpty && name.allSatisfy { allowed.contains($0) }
+    }
+
+    /// Whether `value` can go in a header: no line breaks, which would split the request.
+    /// Checked per scalar, because Swift treats "\r\n" as a single Character.
+    public static func isValidHeaderValue(_ value: String) -> Bool {
+        !value.unicodeScalars.contains { $0 == "\r" || $0 == "\n" }
+    }
+
+    /// Header lines pasted as text, e.g. a Cloudflare Access service token copied as
+    /// `CF-Access-Client-Id: …` / `CF-Access-Client-Secret: …`, or curl's `-H "Name: value"`.
+    /// Splits at the first colon only, so values that contain colons survive. Lines without a valid
+    /// header name are skipped.
+    public static func parseHeaderLines(_ text: String) -> [(name: String, value: String)] {
+        text.split(whereSeparator: \.isNewline).compactMap { rawLine in
+            var line = rawLine.trimmingCharacters(in: .whitespaces)
+            for prefix in ["-H ", "--header "] where line.hasPrefix(prefix) {
+                line = String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+            }
+            line = line.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            guard let colon = line.firstIndex(of: ":") else { return nil }
+            let name = line[..<colon].trimmingCharacters(in: .whitespaces)
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            guard isValidHeaderName(name), isValidHeaderValue(value) else { return nil }
+            return (name, value)
+        }
+    }
+
+    /// The value of an HTTP Basic `Authorization` header: `Basic base64(username:password)`.
+    public static func basicAuthorization(username: String, password: String) -> String {
+        "Basic " + Data("\(username):\(password)".utf8).base64EncodedString()
+    }
+
     /// `t=search`. A nil or empty `query` asks for the newest releases, which indexers allow and
     /// which makes a cheap credentials check.
     public static func search(base: URL, apiKey: String, query: String?,

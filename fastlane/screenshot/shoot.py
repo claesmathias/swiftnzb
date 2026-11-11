@@ -157,22 +157,11 @@ def seed(cont, state, nzb, queue_mode="live"):
             jobs = [job("ubuntu-24.04-desktop-amd64", "paused", files, srv, added_ago=420)] + history
         else:
             jobs = [job("ubuntu-24.04-desktop-amd64", "queued", files, srv, added_ago=8)] + history
-        prefs.pop("entitlement.freeDownloads.v1", None)
-    elif state == "history":
+    elif state in ("history", "settings"):
         jobs = history
-        prefs.pop("entitlement.freeDownloads.v1", None)
-    elif state == "settings":
-        jobs = history
-        # Three slots spent -> the Settings row reads "7 free downloads left", which is the
-        # 2.3.2 disclosure Apple wants visible in a screenshot.
-        spent = sorted(str(uuid.uuid4()).upper() for _ in range(3))
-        prefs["entitlement.freeDownloads.v1"] = json.dumps(spent).encode()
     else:
         sys.exit(f"unknown state {state}")
 
-    # Never let a stale Pro flag hide the free-download count.
-    prefs.pop("entitlement.cachedPro.v1", None)
-    prefs.pop("entitlement.grandfathered.v1", None)
     write_prefs(cont, prefs)
     with open(jobs_path(cont), "w") as f:
         json.dump(jobs, f)

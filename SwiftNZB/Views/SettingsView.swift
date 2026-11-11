@@ -8,9 +8,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var entitlements = Entitlements.shared
-    @State private var purchases = PurchaseStore.shared
-
     var body: some View {
         List {
             Section {
@@ -22,29 +19,10 @@ struct SettingsView: View {
                 row("Background", "Screen, notifications and background time", "bolt.badge.clock") { BackgroundSettingsView() }
             }
             Section {
-                // Always here, whether or not there are free downloads left: this is where a
-                // customer restores a purchase, and where App Review finds the purchases at all.
-                row("SwiftNZB Pro", proSubtitle, "sparkles") { PaywallView() }
-            }
-            Section {
                 row("About", nil, "info.circle") { AboutView() }
             }
-            #if DEBUG
-            if !AppRouter.isScreenshotRun {
-                Section {
-                    row("Entitlement (Debug)", nil, "ladybug") { EntitlementDebugView() }
-                }
-            }
-            #endif
         }
         .navigationTitle("Settings")
-    }
-
-    private var proSubtitle: LocalizedStringKey {
-        if entitlements.isPro {
-            return purchases.isGrandfathered ? "Included, for good" : "Unlimited downloads"
-        }
-        return "^[\(entitlements.freeDownloadsRemaining) free download](inflect: true) left"
     }
 
     @ViewBuilder

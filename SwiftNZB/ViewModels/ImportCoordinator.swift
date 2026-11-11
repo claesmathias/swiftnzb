@@ -16,20 +16,12 @@ final class ImportCoordinator {
 
     var pendingJob: DownloadJob?
     var isPresentingConfirm = false
-    var isPresentingPaywall = false
     var errorMessage: String?
     var isPresentingError = false
 
     private init() {}
 
     func handle(url: URL) {
-        // Asked once, here. This is where all four ingress paths meet, and it is before
-        // NZBImporter copies the .nzb into the app's nzb folder — refusing any later would leave
-        // an orphan file in Documents that nothing ever cleans up.
-        guard Entitlements.shared.canAddDownload else {
-            isPresentingPaywall = true
-            return
-        }
         do {
             pendingJob = try NZBImporter.shared.importNZB(at: url)
             isPresentingConfirm = true

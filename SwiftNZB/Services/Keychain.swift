@@ -16,7 +16,6 @@ import Security
 
 enum Keychain {
     static let serverPasswordService = "de.valentinlehmann.swiftnzb.serverpassword"
-    static let entitlementService = "de.valentinlehmann.swiftnzb.entitlement"
 
     static func setPassword(_ password: String, for account: String,
                             service: String = serverPasswordService) {

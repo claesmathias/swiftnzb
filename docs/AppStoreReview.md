@@ -189,6 +189,9 @@ weaker than "the app cannot…").
 
 ## 9. Monetization
 
+> **Obsolete.** SwiftNZB is now free with no in-app purchases; the Pro tier was removed. The rest of
+> this section is kept only as history.
+
 ### One-time App Store Connect setup, in order
 
 Steps 1 and 2 are gating and slow — do them first, not last.

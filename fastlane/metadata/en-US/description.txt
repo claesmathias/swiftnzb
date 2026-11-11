@@ -22,7 +22,7 @@ ON iOS
 • No ads, no tracking, no accounts. The app talks to the server you configure and to nothing else
 
 WHAT IT COSTS
-The first 10 downloads are free. After that, adding a new download needs SwiftNZB Pro, which unlocks unlimited downloads: monthly, yearly, or a one-time lifetime purchase. Current prices are shown in the app. Anyone who installed SwiftNZB before this version keeps unlimited downloads for good.
+SwiftNZB is free, with no download limit and no in-app purchases.
 
 PRIVACY
 SwiftNZB collects no data. Your credentials live in the system Keychain. Downloads run through your own provider, with no developer server anywhere in the path.
